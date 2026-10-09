@@ -1,0 +1,9 @@
+document_id,text,label,expected_alert
+1,"This weekly update describes normal team progress and sprint planning.",safe,Green
+2,"This internal document contains email rahul@example.com and phone 9876543210.",sensitive,Yellow
+3,"This confidential document includes bank account details and urgent payment instructions.",risky,Yellow
+4,"This file contains password information, fraud indicators, and bank account data.",fraud,Red
+5,"Please bypass approval, ignore audit, and delete after reading.",policy_violation,Red
+6,"This is a final warning. Pay or else we will leak your data.",threat,Red
+7,"FINAL FINAL FINAL FINAL WARNING!!!!!! PAY 999999999999 NOW.",anomaly,Yellow
+8,"This report contains PAN ABCDE1234F and employee contact information.",sensitive,Yellow
