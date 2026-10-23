@@ -22,7 +22,9 @@ def detect_abnormal_patterns(text: str) -> dict:
     letter_count = sum(1 for char in text if char.isalpha())
     uppercase_count = sum(1 for char in text if char.isupper())
     digit_count = sum(1 for char in text if char.isdigit())
-    punctuation_count = text.count("!") + text.count("?")
+    exclamation_count = text.count("!")
+    # Runs like "!!!" or "?!?". Single question marks are normal (FAQs, forms).
+    has_repeated_symbols = re.search(r"[!?]{3,}", text) is not None
 
     if word_count < 5:
         anomalies.append(
@@ -54,7 +56,7 @@ def detect_abnormal_patterns(text: str) -> dict:
         )
         total_risk_score += 15
 
-    if punctuation_count > 5:
+    if has_repeated_symbols or exclamation_count > 5:
         anomalies.append(
             {
                 "type": "excessive_warning_symbols",

@@ -1,538 +1,235 @@
-import { useEffect, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  FileSearch,
-  Loader2,
-  LogOut,
-  ShieldCheck,
-  Upload,
-} from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, History, LayoutDashboard, Loader2, LogOut, ScanSearch, ShieldCheck, Users } from "lucide-react";
 import apiClient from "../api/client";
+import AnalysisResult from "../components/AnalysisResult";
+import DocumentTable from "../components/DocumentTable";
+import OverviewView from "../components/OverviewView";
+import ScanView from "../components/ScanView";
+import { PageHeader } from "../components/ui";
 
-function StatCard({ icon: Icon, label, value, tone }) {
-  return (
-    <article className={`stat-card ${tone}`}>
-      <div className="stat-icon">
-        <Icon size={22} />
-      </div>
-      <div>
-        <p>{label}</p>
-        <strong>{value}</strong>
-      </div>
-    </article>
-  );
-}
-
-function getAlertTone(alertLevel) {
-  if (alertLevel === "Red") return "red";
-  if (alertLevel === "Yellow") return "yellow";
-  return "green";
-}
-
-function getTopHighlights(analysis) {
-  if (!analysis?.document_heatmap?.highlights) {
-    return [];
-  }
-
-  return analysis.document_heatmap.highlights.slice(0, 6);
-}
-
-function getDocumentAlertLevel(document) {
-  return document.alert_level || document.risk_analysis?.alert_level || "Green";
-}
-
-function getDocumentRiskScore(document) {
-  return document.risk_score ?? document.risk_analysis?.risk_score ?? 0;
-}
+const HISTORY_LIMIT = 100;
 
 function DashboardPage({ user, onLogout }) {
-  const [activeView, setActiveView] = useState("dashboard");
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const isAdmin = user.role === "admin";
+  const [activeView, setActiveView] = useState("overview");
+  const [scanResult, setScanResult] = useState(null);
+  const [openedDocument, setOpenedDocument] = useState(null);
+  const [returnView, setReturnView] = useState("history");
   const [history, setHistory] = useState([]);
+  const [historyError, setHistoryError] = useState("");
   const [adminDocuments, setAdminDocuments] = useState([]);
   const [adminError, setAdminError] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
 
-  async function loadHistory() {
+  const loadHistory = useCallback(async () => {
     try {
-      const response = await apiClient.get("/documents/history?limit=10");
+      const response = await apiClient.get(`/documents/history?limit=${HISTORY_LIMIT}`);
       setHistory(response.data.documents || []);
-    } catch (err) {
-      console.error("Failed to load document history", err);
+      setHistoryError("");
+    } catch {
+      setHistoryError("Your document history could not be loaded.");
     }
-  }
+  }, []);
 
   async function loadAdminDocuments() {
-    setAdminError("");
-
     try {
-      const response = await apiClient.get("/admin/documents?limit=50");
+      const response = await apiClient.get("/admin/documents?limit=100");
       setAdminDocuments(response.data.documents || []);
-    } catch (err) {
+      setAdminError("");
+    } catch {
       setAdminDocuments([]);
-      setAdminError("Admin access denied or admin documents could not be loaded.");
-      console.error("Failed to load admin documents", err);
+      setAdminError("Admin documents could not be loaded.");
     }
   }
 
   useEffect(() => {
     loadHistory();
-  }, []);
+  }, [loadHistory]);
 
-  async function handleUpload(event) {
-    event.preventDefault();
+  function navigate(view) {
+    setActiveView(view);
+    window.scrollTo({ top: 0 });
 
-    if (!selectedFile) {
-      setError("Please select a document first.");
-      return;
-    }
+    if (view === "history" || view === "overview") loadHistory();
+    if (view === "admin") loadAdminDocuments();
+  }
 
-    setError("");
-    setUploading(true);
-    setAnalysis(null);
+  async function openDocument(document, from = activeView) {
+    if (!document) return;
+
+    // Lists leave out the full text and findings; load the complete report.
+    setOpenedDocument(document);
+    setReturnView(from);
+    setActiveView("report");
+    setReportError("");
+    setReportLoading(true);
+    window.scrollTo({ top: 0 });
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const response = await apiClient.post("/documents/upload", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      setAnalysis(response.data);
-      loadHistory();
-    } catch (err) {
-      setError("Upload failed. Please login again or check backend server.");
+      const response = await apiClient.get(`/documents/${document.document_id}`);
+      setOpenedDocument(response.data);
+    } catch {
+      setReportError("The full report could not be loaded. Showing the saved summary.");
     } finally {
-      setUploading(false);
+      setReportLoading(false);
     }
   }
 
-  const alertLevel = analysis?.risk_analysis?.alert_level || "Green";
-  const riskScore = analysis?.risk_analysis?.risk_score ?? 0;
-  const trustScore = analysis?.risk_analysis?.trust_score ?? 100;
-  const alertTone = getAlertTone(alertLevel);
+  function handleScanResult(result) {
+    setScanResult(result);
+    if (result) loadHistory();
+  }
 
-  const evidenceChartData =
-    analysis?.risk_report?.evidence?.map((item) => ({
-      name: item.category,
-      count: item.count,
-    })) || [];
+  /** After "not a risk" changes, keep lists and the open report in sync. */
+  function handleDocumentChange(updated) {
+    const sync = (documents) =>
+      documents.map((document) =>
+        document.document_id === updated.document_id ? { ...document, review: updated.review } : document
+      );
 
-  const alertPieData = [
-    { name: "Risk Score", value: riskScore, color: "#dc2626" },
-    { name: "Trust Score", value: trustScore, color: "#16a34a" },
+    setHistory(sync);
+    setAdminDocuments(sync);
+    if (openedDocument?.document_id === updated.document_id) setOpenedDocument(updated);
+    if (scanResult?.document_id === updated.document_id) setScanResult(updated);
+  }
+
+  const navItems = [
+    { view: "overview", label: "Overview", icon: LayoutDashboard },
+    { view: "scan", label: "Scan document", icon: ScanSearch },
+    { view: "history", label: "History", icon: History },
+    ...(isAdmin ? [{ view: "admin", label: "All documents", icon: Users }] : []),
   ];
 
+  const initials = (user.full_name || user.email)
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
-    <main className="app-shell">
+    <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <ShieldCheck size={30} />
+        <div className="brand">
+          <div className="brand-logo">
+            <ShieldCheck size={20} />
+          </div>
           <div>
             <strong>Red Alert AI</strong>
-            <span>Document Risk Intelligence</span>
+            <span>Document risk scanner</span>
           </div>
         </div>
 
-        <nav className="sidebar-nav">
-          <button
-            className={activeView === "dashboard" ? "active" : ""}
-            onClick={() => setActiveView("dashboard")}
-          >
-            <Activity size={18} />
-            Dashboard
-          </button>
+        <nav className="nav">
+          {navItems.map(({ view, label, icon: Icon }) => {
+            const isActive = activeView === view || (activeView === "report" && returnView === view);
 
-          <button
-            className={activeView === "dashboard" ? "active" : ""}
-            onClick={() => setActiveView("dashboard")}
-          >
-            <Upload size={18} />
-            Upload
-          </button>
-
-          <button
-            className={activeView === "history" ? "active" : ""}
-            onClick={() => {
-              setActiveView("history");
-              loadHistory();
-            }}
-          >
-            <FileSearch size={18} />
-            History
-          </button>
-
-          <button
-            className={activeView === "admin" ? "active" : ""}
-            onClick={() => {
-              setActiveView("admin");
-              loadAdminDocuments();
-            }}
-          >
-            <ShieldCheck size={18} />
-            Admin
-          </button>
+            return (
+              <button
+                key={view}
+                type="button"
+                className={isActive ? "active" : ""}
+                aria-current={isActive ? "page" : undefined}
+                onClick={() => navigate(view)}
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </nav>
+
+        <div className="sidebar-user">
+          <div className="avatar">{initials}</div>
+          <div className="sidebar-user-info">
+            <strong>{user.full_name}</strong>
+            <span title={user.email}>{user.email}</span>
+          </div>
+          <button type="button" className="icon-button" onClick={onLogout} aria-label="Log out" title="Log out">
+            <LogOut size={18} />
+          </button>
+        </div>
       </aside>
 
-      <section className="main-area">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow-dark">Security Console</p>
-            <h1>Document Risk Dashboard</h1>
-          </div>
+      <main className="main">
+        {historyError && activeView !== "scan" && <p className="banner-error">{historyError}</p>}
 
-          <div className="user-box">
-            <span>{user.email}</span>
-            <button onClick={onLogout}>
-              <LogOut size={17} />
-              Logout
-            </button>
-          </div>
-        </header>
-
-        <section className="stats-grid">
-          <StatCard
-            icon={FileSearch}
-            label="Current Risk Score"
-            value={riskScore}
-            tone={alertTone}
+        {activeView === "overview" && (
+          <OverviewView
+            user={user}
+            history={history}
+            onScan={() => navigate("scan")}
+            onOpen={(document) => openDocument(document, "overview")}
+            onViewHistory={() => navigate("history")}
           />
+        )}
 
-          <StatCard
-            icon={ShieldCheck}
-            label="Trust Score"
-            value={trustScore}
-            tone="green"
-          />
-
-          <StatCard
-            icon={AlertTriangle}
-            label="Alert Level"
-            value={alertLevel}
-            tone={alertTone}
-          />
-
-          <StatCard
-            icon={Activity}
-            label="Highlights"
-            value={analysis?.document_heatmap?.total_highlights || 0}
-            tone="blue"
-          />
-        </section>
-
-        {activeView === "dashboard" && (
-          <section className="content-grid">
-            <article className="upload-panel">
-              <div>
-                <p className="eyebrow-dark">AI Scanner</p>
-                <h2>Upload Document For Risk Analysis</h2>
-                <p>
-                  Upload PDF, DOCX, TXT, PNG, JPG, or JPEG files. The system
-                  will extract text, detect threats, and generate a red alert
-                  report.
-                </p>
-              </div>
-
-              <form className="upload-form" onSubmit={handleUpload}>
-                <label className="drop-zone">
-                  <Upload size={34} />
-                  <strong>
-                    {selectedFile ? selectedFile.name : "Choose a document"}
-                  </strong>
-                  <span>Click here to select a file from your computer.</span>
-
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
-                    onChange={(event) => setSelectedFile(event.target.files[0])}
-                  />
-                </label>
-
-                {error && <p className="error-message">{error}</p>}
-
-                <button
-                  className="primary-action"
-                  type="submit"
-                  disabled={uploading}
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="spin" size={18} />
-                      Analyzing...
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={18} />
-                      Analyze Document
-                    </>
-                  )}
-                </button>
-              </form>
-            </article>
-
-            <article className={`result-panel ${alertTone}`}>
-              <div className="result-header">
-                <div>
-                  <p className="eyebrow-dark">AI Result</p>
-                  <h2>
-                    {analysis
-                      ? analysis.risk_report.title
-                      : "No Document Scanned"}
-                  </h2>
-                  <p>
-                    {analysis
-                      ? analysis.risk_report.overview
-                      : "Upload a document to see the risk score, alert level, and findings."}
-                  </p>
-                </div>
-
-                {analysis && (
-                  <span className={`alert-badge ${alertTone}`}>
-                    {analysis.risk_analysis.alert_level}
-                  </span>
-                )}
-              </div>
-
-              {analysis && (
-                <div className="result-stack">
-                  <div className="risk-meter">
-                    <span>Risk Score</span>
-                    <strong>{analysis.risk_analysis.risk_score}/100</strong>
-                  </div>
-
-                  <div className="summary-box">
-                    <strong>AI Summary</strong>
-                    <p>{analysis.summary.summary_text}</p>
-                  </div>
-
-                  <div className="recommendation-box">
-                    <strong>Recommendation</strong>
-                    <p>{analysis.risk_report.recommendation}</p>
-                  </div>
-
-                  <div className="mini-section">
-                    <h3>Risk Evidence</h3>
-                    <div className="finding-list">
-                      {analysis.risk_report.evidence.map((item) => (
-                        <div key={item.category} className="finding-item">
-                          <span>{item.category}</span>
-                          <strong>{item.count}</strong>
-                          <small>{item.explanation}</small>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mini-section">
-                    <h3>Highlighted Suspicious Sections</h3>
-                    <div className="highlight-list">
-                      {getTopHighlights(analysis).map((item, index) => (
-                        <div
-                          key={`${item.category}-${index}`}
-                          className={`highlight-item ${item.color}`}
-                        >
-                          <span>{item.category}</span>
-                          <strong>{item.label}</strong>
-                          <small>
-                            Severity: {item.severity} | Risk points:{" "}
-                            {item.risk_points}
-                          </small>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mini-section">
-                    <h3>Risk Factors</h3>
-                    <div className="factor-list">
-                      {analysis.risk_analysis.risk_factors.map((factor) => (
-                        <span key={factor}>{factor}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {analysis.tampering_analysis?.tampering_suspicions_found >
-                    0 && (
-                    <div className="mini-section">
-                      <h3>Tampering Suspicion</h3>
-                      <div className="highlight-list">
-                        {analysis.tampering_analysis.findings.map((item) => (
-                          <div key={item.type} className="highlight-item red">
-                            <span>{item.type}</span>
-                            <strong>{item.description}</strong>
-                            <small>Risk points: {item.risk_points}</small>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </article>
-
-            <article className="analytics-panel">
-              <div>
-                <p className="eyebrow-dark">Analytics</p>
-                <h2>Risk Breakdown</h2>
-              </div>
-
-              {analysis ? (
-                <div className="chart-grid">
-                  <div className="chart-card">
-                    <h3>Evidence Count</h3>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={evidenceChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip />
-                        <Bar
-                          dataKey="count"
-                          radius={[6, 6, 0, 0]}
-                          fill="#dc2626"
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="chart-card">
-                    <h3>Risk vs Trust</h3>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie
-                          data={alertPieData}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={58}
-                          outerRadius={92}
-                          paddingAngle={4}
-                        >
-                          {alertPieData.map((entry) => (
-                            <Cell key={entry.name} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              ) : (
-                <p className="empty-text">
-                  Upload a document to generate analytics.
-                </p>
-              )}
-            </article>
-
-            <HistoryPanel history={history} />
-          </section>
+        {activeView === "scan" && (
+          <ScanView analysis={scanResult} onAnalysis={handleScanResult} onChange={handleDocumentChange} />
         )}
 
         {activeView === "history" && (
-          <section className="content-grid">
-            <HistoryPanel history={history} />
-          </section>
+          <>
+            <PageHeader
+              eyebrow="History"
+              title="Your documents"
+              description="Every document you have scanned. Select one to see its full report."
+            />
+            <DocumentTable
+              documents={history}
+              onOpen={(document) => openDocument(document, "history")}
+              emptyText="You have not scanned any documents yet."
+            />
+          </>
         )}
 
-        {activeView === "admin" && (
-          <section className="content-grid">
-            <article className="admin-panel">
-              <div>
-                <p className="eyebrow-dark">Admin</p>
-                <h2>All Uploaded Documents</h2>
-              </div>
-
-              {adminError && <p className="error-message">{adminError}</p>}
-
-              <div className="admin-table">
-                <div className="admin-row admin-head">
-                  <span>Filename</span>
-                  <span>User</span>
-                  <span>Alert</span>
-                  <span>Risk</span>
-                </div>
-
-                {adminDocuments.length === 0 ? (
-                  <p className="empty-text">No admin documents loaded.</p>
-                ) : (
-                  adminDocuments.map((document) => {
-                    const documentAlertLevel = getDocumentAlertLevel(document);
-                    const documentRiskScore = getDocumentRiskScore(document);
-
-                    return (
-                      <div key={document.document_id} className="admin-row">
-                        <span>{document.filename}</span>
-                        <span>{document.uploaded_by_email || "Unknown"}</span>
-                        <span
-                          className={`history-badge ${documentAlertLevel.toLowerCase()}`}
-                        >
-                          {documentAlertLevel}
-                        </span>
-                        <span>{documentRiskScore}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </article>
-          </section>
+        {activeView === "admin" && isAdmin && (
+          <>
+            <PageHeader
+              eyebrow="Admin"
+              title="All documents"
+              description="Documents scanned by every user."
+            />
+            {adminError && <p className="banner-error">{adminError}</p>}
+            <DocumentTable
+              documents={adminDocuments}
+              onOpen={(document) => openDocument(document, "admin")}
+              showUser
+              emptyText="No documents have been scanned yet."
+            />
+          </>
         )}
-      </section>
-    </main>
-  );
-}
 
-function HistoryPanel({ history }) {
-  return (
-    <article className="history-panel">
-      <div>
-        <p className="eyebrow-dark">History</p>
-        <h2>Recent Documents</h2>
-      </div>
-
-      <div className="history-list">
-        {history.length === 0 ? (
-          <p className="empty-text">No uploaded documents found.</p>
-        ) : (
-          history.map((document) => {
-            const documentAlertLevel = getDocumentAlertLevel(document);
-
-            return (
-              <div key={document.document_id} className="history-item">
-                <div>
-                  <strong>{document.filename}</strong>
-                  <span>{document.uploaded_by_email || "Current user"}</span>
-                </div>
-
-                <span
-                  className={`history-badge ${documentAlertLevel.toLowerCase()}`}
-                >
-                  {documentAlertLevel}
-                </span>
-              </div>
-            );
-          })
+        {activeView === "report" && openedDocument && (
+          <>
+            <PageHeader
+              eyebrow="Report"
+              title="Analysis report"
+              actions={
+                <button type="button" className="button secondary" onClick={() => navigate(returnView)}>
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+              }
+            />
+            {reportError && <p className="banner-error">{reportError}</p>}
+            {reportLoading ? (
+              <section className="card loading-card">
+                <Loader2 className="spin" size={20} />
+                Loading report…
+              </section>
+            ) : (
+              <AnalysisResult
+                key={openedDocument.document_id}
+                analysis={openedDocument}
+                onChange={handleDocumentChange}
+              />
+            )}
+          </>
         )}
-      </div>
-    </article>
+      </main>
+    </div>
   );
 }
 

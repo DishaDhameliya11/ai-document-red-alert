@@ -8,6 +8,9 @@ from app.api.routes.health import router as health_router
 from app.api.routes.documents import router as documents_router
 from app.core.config import settings
 from contextlib import asynccontextmanager
+import threading
+
+from app.ai.semantic_classifier import warm_up as warm_up_semantic_model
 
 from app.api.routes.analytics import router as analytics_router
 from app.db.mongodb import close_mongodb_connection, connect_to_mongodb
@@ -15,6 +18,10 @@ from app.db.mongodb import close_mongodb_connection, connect_to_mongodb
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongodb()
+
+    # Loading the AI model takes a few seconds; do it in the background so
+    # the server is usable immediately.
+    threading.Thread(target=warm_up_semantic_model, daemon=True).start()
 
     yield
 

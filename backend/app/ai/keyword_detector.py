@@ -1,3 +1,7 @@
+from app.ai.text_matching import find_phrase_positions
+
+# Threat words such as "blackmail" are scored by threat_detector only, so a
+# single word is never counted twice.
 RISKY_KEYWORDS = {
     # English keywords
     "confidential": 15,
@@ -7,7 +11,6 @@ RISKY_KEYWORDS = {
     "fraud": 30,
     "fake": 20,
     "threat": 30,
-    "blackmail": 35,
     "classified": 25,
     "do not disclose": 30,
 
@@ -18,30 +21,8 @@ RISKY_KEYWORDS = {
     "પાસવર્ડ": 25,
     "છેતરપિંડી": 30,
     "નકલી": 20,
-    "ધમકી": 30,
-    "બ્લેકમેલ": 35,
     "જાહેર ન કરશો": 30,
 }
-
-
-def find_keyword_positions(text: str, keyword: str) -> list[tuple[int, int]]:
-    positions = []
-    text_lower = text.lower()
-    keyword_lower = keyword.lower()
-
-    start = 0
-
-    while True:
-        index = text_lower.find(keyword_lower, start)
-
-        if index == -1:
-            break
-
-        end = index + len(keyword)
-        positions.append((index, end))
-        start = end
-
-    return positions
 
 
 def create_excerpt(text: str, start: int, end: int, window: int = 60) -> str:
@@ -51,7 +32,10 @@ def create_excerpt(text: str, start: int, end: int, window: int = 60) -> str:
     return text[excerpt_start:excerpt_end].strip()
 
 
-def detect_risky_keywords(text: str) -> dict:
+def detect_risky_keywords(text: str, excerpt_text: str | None = None) -> dict:
+    """excerpt_text: the same text with personal data masked (same length),
+    used for the stored excerpts so they never contain raw card or ID numbers."""
+    excerpt_source = excerpt_text if excerpt_text is not None else text
     matched_keywords = []
     highlighted_sections = []
     risk_score = 0
@@ -65,7 +49,7 @@ def detect_risky_keywords(text: str) -> dict:
         }
 
     for keyword, score in RISKY_KEYWORDS.items():
-        positions = find_keyword_positions(text, keyword)
+        positions = find_phrase_positions(text, keyword)
 
         if positions:
             matched_keywords.append(keyword)
@@ -78,7 +62,7 @@ def detect_risky_keywords(text: str) -> dict:
                         "risk_points": score,
                         "start_index": start,
                         "end_index": end,
-                        "excerpt": create_excerpt(text, start, end),
+                        "excerpt": create_excerpt(excerpt_source, start, end),
                     }
                 )
 

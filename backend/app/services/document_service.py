@@ -4,6 +4,7 @@ import uuid
 import logging
 
 from fastapi import UploadFile , HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from app.repositories.document_repository import save_document_analysis
 from app.ai.pipeline import analyze_document_text
@@ -16,6 +17,9 @@ from app.document_processing.text_extractor import extract_text_from_txt
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads")
+TEXT_PREVIEW_CHARS = 600
+# The full masked text is stored so every finding can be shown in context.
+MAX_STORED_TEXT_CHARS = 200_000
 
 
 def create_safe_filename(original_filename: str) -> str:
@@ -55,7 +59,15 @@ async def save_uploaded_document(file: UploadFile , current_user : dict) -> dict
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        extracted_text = extract_text_by_file_type(file_path, file_extension)
+        # OCR and the AI model are slow, blocking work: run them in a worker
+        # thread so other requests are not frozen meanwhile.
+        try:
+            extracted_text = await run_in_threadpool(
+                extract_text_by_file_type, file_path, file_extension
+            )
+        finally:
+            # Only the masked analysis is kept; the original file is not stored.
+            file_path.unlink(missing_ok=True)
 
         logger.info(
             "Extracted %s characters from %s",
@@ -63,16 +75,16 @@ async def save_uploaded_document(file: UploadFile , current_user : dict) -> dict
             original_filename,
         )
 
-        analysis_result = analyze_document_text(extracted_text)
+        analysis_result = await run_in_threadpool(analyze_document_text, extracted_text)
+        redacted_text = analysis_result["redacted_text"]
 
         response_data = {
             "message": "File uploaded successfully",
             "filename": original_filename,
             "stored_filename": stored_filename,
-            "saved_path": str(file_path),
             "text_extracted": bool(extracted_text),
             "character_count": len(extracted_text),
-            "text_preview": extracted_text[:300],
+            "text_preview": redacted_text[:TEXT_PREVIEW_CHARS],
             "summary": analysis_result["summary"],
             "keyword_analysis": analysis_result["keyword_analysis"],
             "sensitive_info_analysis": analysis_result["sensitive_info_analysis"],
@@ -86,6 +98,10 @@ async def save_uploaded_document(file: UploadFile , current_user : dict) -> dict
             "uploaded_by_email": current_user["email"],
             "risk_report": analysis_result["risk_report"],
             "document_heatmap": analysis_result["document_heatmap"],
+            "semantic_analysis": analysis_result["semantic_analysis"],
+            "findings": analysis_result["findings"],
+            "document_text": redacted_text[:MAX_STORED_TEXT_CHARS],
+            "document_text_truncated": len(redacted_text) > MAX_STORED_TEXT_CHARS,
         }
 
         document_id = await save_document_analysis(response_data)
@@ -104,5 +120,5 @@ async def save_uploaded_document(file: UploadFile , current_user : dict) -> dict
 
         raise HTTPException(
             status_code=500,
-            detail=f"Document processing failed: {str(error)}",
+            detail="The document could not be processed.",
         )

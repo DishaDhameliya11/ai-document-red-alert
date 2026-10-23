@@ -16,6 +16,7 @@ def build_risk_factors(
     anomaly_risk_score: int,
     compliance_risk_score: int = 0,
     tampering_risk_score: int = 0,
+    semantic_risk_score: int = 0,
 ) -> list[str]:
     risk_factors = []
 
@@ -40,6 +41,9 @@ def build_risk_factors(
     if tampering_risk_score > 0:
         risk_factors.append("Possible text tampering detected")
 
+    if semantic_risk_score > 0:
+        risk_factors.append("AI model detected risky meaning")
+
     if not risk_factors:
         risk_factors.append("No major risk indicators detected")
 
@@ -53,7 +57,8 @@ def calculate_risk_result(
     threat_risk_score: int = 0,
     anomaly_risk_score: int = 0,
     compliance_risk_score: int = 0,
-    tampering_risk_score: int = 0
+    tampering_risk_score: int = 0,
+    semantic_risk_score: int = 0,
 ) -> dict:
     risk_score = (
         keyword_risk_score
@@ -63,6 +68,7 @@ def calculate_risk_result(
         + anomaly_risk_score
         + compliance_risk_score
         + tampering_risk_score
+        + semantic_risk_score
     )
     risk_score = max(0, min(risk_score, 100))
 
@@ -75,7 +81,8 @@ def calculate_risk_result(
         threat_risk_score=threat_risk_score,
         anomaly_risk_score=anomaly_risk_score,
         compliance_risk_score=compliance_risk_score,
-        tampering_risk_score=tampering_risk_score
+        tampering_risk_score=tampering_risk_score,
+        semantic_risk_score=semantic_risk_score,
     )
 
     return {

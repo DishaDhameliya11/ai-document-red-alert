@@ -6,6 +6,7 @@ def generate_risk_report(
     threat_analysis: dict,
     anomaly_analysis: dict,
     indian_compliance_analysis: dict,
+    semantic_analysis: dict | None = None,
 ) -> dict:
     risk_score = risk_analysis["risk_score"]
     alert_level = risk_analysis["alert_level"]
@@ -31,6 +32,10 @@ def generate_risk_report(
         (
             "Indian compliance data",
             indian_compliance_analysis["compliance_items_found"],
+        ),
+        (
+            "AI model signals",
+            sum(1 for signal in (semantic_analysis or {}).get("signals", []) if signal["counted"]),
         ),
     ]
 

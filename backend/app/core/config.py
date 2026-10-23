@@ -19,7 +19,18 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     OCR_LANGUAGES: str = "eng+guj"
-    
+    # Empty = find tesseract on PATH or in the default Windows install folder.
+    TESSERACT_CMD: str = ""
+    # Empty = use backend/tessdata (holds the Gujarati language file).
+    TESSDATA_DIR: str = ""
+
+    # AI model that reads meaning, not just keywords (needs torch + transformers).
+    # The app works without it; the rule-based detectors still run.
+    ENABLE_SEMANTIC_MODEL: bool = True
+    SEMANTIC_MODEL_NAME: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
+    # How sure the model must be before a signal counts (0-1).
+    SEMANTIC_THRESHOLD: float = 0.75
+
     FRONTEND_URL: str = "http://localhost:5173"
 
     API_V1_PREFIX: str = "/api/v1"

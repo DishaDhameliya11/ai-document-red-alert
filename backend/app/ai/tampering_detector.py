@@ -1,5 +1,7 @@
 import re
 
+MIN_DUPLICATE_LINE_WORDS = 8
+
 
 def detect_tampering_suspicion(text: str) -> dict:
     findings = []
@@ -31,7 +33,9 @@ def detect_tampering_suspicion(text: str) -> dict:
             30,
         )
 
-    obfuscated_pattern = r"\b(passw0rd|pa55word|acc0unt|fr[a@]ud)\b"
+    # Only the substituted spellings: the plain words are scored by keyword_detector.
+    # (\b would not work before "@", so lookarounds are used instead.)
+    obfuscated_pattern = r"(?<!\w)(passw0rd|pa55word|p@ssword|p@ssw0rd|acc0unt|fr@ud|fr4ud)(?!\w)"
     if re.search(obfuscated_pattern, text, flags=re.IGNORECASE):
         add_finding(
             "obfuscated_risky_words",
@@ -53,11 +57,17 @@ def detect_tampering_suspicion(text: str) -> dict:
             10,
         )
 
-    lines = [line.strip().lower() for line in text.splitlines() if line.strip()]
+    # Only long lines count: short repeats are page headers and footers,
+    # which every multi-page PDF has.
+    lines = [
+        line.strip().lower()
+        for line in text.splitlines()
+        if len(line.split()) >= MIN_DUPLICATE_LINE_WORDS
+    ]
     if len(lines) != len(set(lines)):
         add_finding(
             "duplicate_lines",
-            "Duplicate text lines were detected.",
+            "Duplicate sentences or paragraphs were detected.",
             15,
         )
 

@@ -29,3 +29,9 @@ frontend/build/
 # OS files
 .DS_Store
 Thumbs.db
+# OCR language files (downloaded by backend/scripts/download_ocr_languages.py)
+backend/tessdata/*.traineddata
+
+# Windows shortcuts and notebook checkpoints
+*.lnk
+.ipynb_checkpoints/

@@ -3,8 +3,51 @@ from pydantic import BaseModel
 
 class SummaryResponse(BaseModel):
     summary_text: str
+    key_sentences: list[str] = []
+    risk_summary: str = ""
     word_count: int
     sentence_count: int
+
+
+class SemanticSignalResponse(BaseModel):
+    key: str
+    label: str
+    confidence: float
+    evidence: str
+    points: int
+    counted: bool
+    already_found_by_rules: bool
+    start_index: int | None = None
+    end_index: int | None = None
+
+
+class FindingResponse(BaseModel):
+    id: str
+    category: str
+    type: str
+    label: str
+    value: str
+    base_points: int
+    points: int
+    start_index: int | None = None
+    end_index: int | None = None
+    line: int | None = None
+    context: str = ""
+    context_match_start: int | None = None
+    context_match_end: int | None = None
+    why: str
+    what_to_do: str
+    note: str = ""
+    confidence: float | None = None
+
+
+class SemanticAnalysisResponse(BaseModel):
+    status: str
+    model: str
+    reason: str = ""
+    threshold: float
+    signals: list[SemanticSignalResponse]
+    semantic_risk_score: int
 
 
 class HighlightedSectionResponse(BaseModel):
@@ -142,7 +185,6 @@ class DocumentUploadResponse(BaseModel):
     message: str
     filename: str
     stored_filename: str
-    saved_path: str
     uploaded_by: str
     uploaded_by_email: str
     text_extracted: bool
@@ -160,6 +202,10 @@ class DocumentUploadResponse(BaseModel):
     risk_analysis: RiskAnalysisResponse
     risk_report: RiskReportResponse
     document_heatmap: DocumentHeatmapResponse
+    semantic_analysis: SemanticAnalysisResponse | None = None
+    findings: list[FindingResponse] = []
+    document_text: str = ""
+    document_text_truncated: bool = False
 
 
 class DocumentHistoryItemResponse(BaseModel):

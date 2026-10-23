@@ -1,8 +1,12 @@
 import { useState } from "react";
 import {
-  AlertTriangle,
+  Eye,
+  EyeOff,
+  FileSearch,
+  Languages,
   Lock,
   Mail,
+  ShieldAlert,
   ShieldCheck,
   User,
 } from "lucide-react";
@@ -17,6 +21,7 @@ function LoginPage({ onLogin }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -68,46 +73,53 @@ function LoginPage({ onLogin }) {
   return (
     <main className="login-page">
       <section className="login-visual">
-        <div className="brand-mark">
-          <ShieldCheck size={34} />
+        <div className="login-brand">
+          <div className="brand-logo">
+            <ShieldCheck size={22} />
+          </div>
+          <strong>Red Alert AI</strong>
         </div>
 
-        <div>
-          <p className="eyebrow">AI Security Intelligence</p>
-          <h1>AI Document Red Alert Detection System</h1>
+        <div className="login-hero">
+          <p className="eyebrow">Document risk scanner</p>
+          <h1>Know what is inside a document before you share it.</h1>
           <p className="hero-copy">
-            Scan uploaded documents, detect suspicious patterns, identify
-            sensitive information, and generate risk intelligence instantly.
+            Upload a PDF, Word file, text file or scanned image. Red Alert AI
+            finds threats, fraud signals, policy violations and personal data,
+            and explains every point of its risk score.
           </p>
+
+          <ul className="feature-list">
+            <li>
+              <ShieldAlert size={18} />
+              Threat, fraud and policy-violation detection
+            </li>
+            <li>
+              <FileSearch size={18} />
+              Aadhaar, PAN, card and bank detail detection
+            </li>
+            <li>
+              <Languages size={18} />
+              English and Gujarati documents
+            </li>
+          </ul>
         </div>
 
         <div className="risk-strip">
-          <div>
-            <span className="dot green"></span>
-            Green
-          </div>
-          <div>
-            <span className="dot yellow"></span>
-            Yellow
-          </div>
-          <div>
-            <span className="dot red"></span>
-            Red Alert
-          </div>
+          <span><span className="dot green" /> Green · 0–30</span>
+          <span><span className="dot yellow" /> Yellow · 31–70</span>
+          <span><span className="dot red" /> Red · 71–100</span>
         </div>
       </section>
 
       <section className="login-panel">
         <div className="panel-header">
-          <div className="panel-icon">
-            <AlertTriangle size={24} />
-          </div>
           <div>
-            <h2>{mode === "login" ? "Secure Login" : "Create Account"}</h2>
+            <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
             <p>
               {mode === "login"
-                ? "Enter your account credentials to continue."
-                : "Register a new account to start scanning documents."}
+                ? "Log in to scan and review your documents."
+                : "It only takes a moment to get started."}
             </p>
           </div>
         </div>
@@ -122,7 +134,7 @@ function LoginPage({ onLogin }) {
               setSuccess("");
             }}
           >
-            Login
+            Log in
           </button>
 
           <button
@@ -163,7 +175,8 @@ function LoginPage({ onLogin }) {
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="user@example.com"
+                placeholder="you@example.com"
+                autoComplete="email"
                 required
               />
             </div>
@@ -174,26 +187,35 @@ function LoginPage({ onLogin }) {
             <div className="input-box">
               <Lock size={18} />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter password"
+                placeholder={mode === "login" ? "Your password" : "Choose a password"}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
               />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </label>
 
-          {error && <p className="error-message">{error}</p>}
-          {success && <p className="success-message">{success}</p>}
+          {error && <p className="form-error">{error}</p>}
+          {success && <p className="form-success">{success}</p>}
 
-          <button type="submit" disabled={loading}>
+          <button type="submit" className="button primary large" disabled={loading}>
             {loading
               ? mode === "login"
-                ? "Checking..."
-                : "Creating..."
+                ? "Logging in…"
+                : "Creating account…"
               : mode === "login"
-                ? "Login"
-                : "Register"}
+                ? "Log in"
+                : "Create account"}
           </button>
         </form>
       </section>

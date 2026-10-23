@@ -1,3 +1,5 @@
+from app.ai.text_matching import find_phrase_positions
+
 POLICY_VIOLATION_PHRASES = {
     "bypass approval": 25,
     "hide this transaction": 30,
@@ -7,8 +9,8 @@ POLICY_VIOLATION_PHRASES = {
     "off the record": 20,
     "no paper trail": 30,
     "avoid detection": 35,
-    "without approval":25,
-    "do not keep evidence":30,
+    "without approval": 25,
+    "do not keep evidence": 30,
     # Gujarati policy violation phrases
     "ઓડિટ અવગણો": 25,
     "આ સંદેશ કાઢી નાખો": 25,
@@ -29,13 +31,10 @@ def detect_policy_violations(text: str) -> dict:
             "violations": [],
         }
 
-    text_lower = text.lower()
-
     for phrase, risk_points in POLICY_VIOLATION_PHRASES.items():
-        if phrase in text_lower:
-            start_index = text_lower.find(phrase)
-            end_index = start_index + len(phrase)
+        positions = find_phrase_positions(text, phrase)
 
+        for start_index, end_index in positions:
             violations.append(
                 {
                     "phrase": phrase,
@@ -45,6 +44,7 @@ def detect_policy_violations(text: str) -> dict:
                 }
             )
 
+        if positions:
             total_risk_score += risk_points
 
     total_risk_score = min(total_risk_score, 100)

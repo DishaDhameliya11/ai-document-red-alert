@@ -22,7 +22,7 @@ This project belongs to the following areas:
 
 - User registration and JWT login
 - PDF, DOCX, TXT, and image upload
-- OCR support for scanned image documents
+- OCR for photos and scanned PDFs (English + Gujarati)
 - English and Gujarati risky content detection
 - Suspicious keyword detection
 - Sensitive information detection
@@ -32,7 +32,9 @@ This project belongs to the following areas:
 - Tampered or abnormal text detection
 - Risk score generation
 - Green, Yellow, and Red alert classification
-- AI-generated document summary
+- AI model (multilingual mDeBERTa) that detects risky meaning even without keywords
+- Key-sentence summary (TextRank) plus a plain-language "what we found" summary
+- Personal data masked everywhere it is stored or shown; uploaded files are not kept
 - Highlighted suspicious sections
 - Document history
 - Admin panel
@@ -72,8 +74,10 @@ This project belongs to the following areas:
 
 ### AI/NLP
 
-- Rule-based NLP detection
-- Keyword matching
+- Rule-based detection (whole-word phrase matching, English + Gujarati)
+- Checksum validation for card (Luhn) and Aadhaar (Verhoeff) numbers
+- Zero-shot NLI model: MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7
+- Extractive TextRank summarisation
 - Regular expressions
 - OCR text extraction
 - Risk scoring engine
@@ -120,3 +124,69 @@ ai-document-red-alert-project
 - Suspicious sections are highlighted.
 - Result is stored in MongoDB.
 - React dashboard displays the analysis.
+
+## Setup
+
+```bat
+:: Python packages (from the project root)
+python -m venv .venv
+.venv\Scripts\python -m pip install -r backend\requirements-dev.txt
+
+:: Optional AI model (~1.5 GB with PyTorch; the model downloads on first start)
+.venv\Scripts\python -m pip install -r backend\requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+:: OCR: install Tesseract, then fetch the Gujarati language file
+winget install UB-Mannheim.TesseractOCR
+.venv\Scripts\python backend\scripts\download_ocr_languages.py
+
+:: Frontend packages
+cd frontend && npm install
+```
+
+Then double-click **`START_PROJECT.bat`** — it starts MongoDB (if needed), the
+backend and the frontend, and opens http://localhost:5173.
+
+Without the AI packages or Tesseract the app still runs: the rule-based
+detectors work on PDF, DOCX and TXT files.
+
+### Settings (`backend/.env`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ENABLE_SEMANTIC_MODEL` | `true` | Use the AI model on top of the rules |
+| `SEMANTIC_THRESHOLD` | `0.75` | How sure the model must be (0–1) before a signal counts |
+| `OCR_LANGUAGES` | `eng+guj` | Tesseract languages |
+| `TESSERACT_CMD` | *(auto)* | Path to `tesseract.exe` if it is not found automatically |
+
+### How the AI model is used
+
+The model compares each part of the document with short descriptions
+(threat/extortion, scam, request for passwords or PINs, hiding transactions
+from auditors) and with "ordinary content". A signal counts only when the model
+is at least 75% sure, and only for risks the rules did not already find. On its
+own the model can raise a document to **Yellow** (review), never to **Red**.
+
+On hand-written test sentences it caught 5 of 9 paraphrased risks that contain
+no keywords, without flagging any of the safe examples. It is an extra signal,
+not a replacement for human review; a model fine-tuned on real labelled
+documents would do better.
+
+## Tests
+
+```bat
+cd backend
+..\.venv\Scripts\python -m pytest -q tests
+..\.venv\Scripts\python scripts\evaluate_sample_dataset.py
+```
+
+## Privacy maintenance
+
+Documents analysed before masking was added may still contain raw personal
+data. Preview, then apply:
+
+```bat
+cd backend
+..\.venv\Scripts\python scripts\redact_existing_documents.py
+..\.venv\Scripts\python scripts\redact_existing_documents.py --apply
+```
+

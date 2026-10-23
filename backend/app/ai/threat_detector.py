@@ -1,3 +1,5 @@
+from app.ai.text_matching import find_phrase_positions
+
 THREAT_PHRASES = {
     "pay or else": 35,
     "leak your data": 35,
@@ -29,19 +31,10 @@ def detect_threats(text: str) -> dict:
             "threats": [],
         }
 
-    text_lower = text.lower()
-
     for phrase, risk_points in THREAT_PHRASES.items():
-        search_start = 0
+        positions = find_phrase_positions(text, phrase)
 
-        while True:
-            start_index = text_lower.find(phrase, search_start)
-
-            if start_index == -1:
-                break
-
-            end_index = start_index + len(phrase)
-
+        for start_index, end_index in positions:
             threats.append(
                 {
                     "phrase": phrase,
@@ -51,8 +44,9 @@ def detect_threats(text: str) -> dict:
                 }
             )
 
+        # Repeating a phrase does not make the document more threatening.
+        if positions:
             total_risk_score += risk_points
-            search_start = end_index
 
     total_risk_score = min(total_risk_score, 100)
 
